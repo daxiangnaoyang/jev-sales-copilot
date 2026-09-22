@@ -18,7 +18,7 @@
 - 能生成 `product-showcase` 素材任务草稿，但不会调用图像/视频服务。
 - 只提供复制，不自动发送，不自动报价，不自动承诺折扣、交期或退款。
 
-真实 Jev API、屏幕采集、微信/飞书适配器和本地持久化会在下一阶段接入。
+真实 Jev API、屏幕采集、微信适配器和本地持久化会在下一阶段接入。接入边界和 Mac 优先方案见 [微信、Jev 与 Agent 接入方案](./docs/WECHAT-AGENT-JEV.md)。
 
 ## 运行
 
@@ -54,6 +54,10 @@ npm run tauri dev
 3. 接入 `product-showcase` 的事实卡与素材生产任务。
 4. 增加 macOS 屏幕采集和输入框填入适配器，仍不自动发送。
 5. 用脱敏标注对话测试意图、阶段、风险和下一步动作准确度。
+
+## 当前推荐的独立 App 路线
+
+先用手动粘贴跑通“对话 → Jev → Agent → 素材任务 → 人工复制”，再接 macOS 的 ScreenCaptureKit + Vision。这样微信权限、OCR 误识别和模型服务故障不会把核心销售流程绑死，也不会引入 AgentHub Desktop 依赖。
 
 ## License
 

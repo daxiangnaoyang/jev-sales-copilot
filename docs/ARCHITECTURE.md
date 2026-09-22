@@ -60,6 +60,12 @@ Human Review → Copy / Fill → Human Send
 - `AgentStrategyProvider.generate(input)`：未来接 CLI Agent、OpenAI 兼容 API 或本地 Agent。
 - Demo Provider 作为离线回归和无密钥演示，不应被误认为真实模型结果。
 
+## 微信与真实模型接入
+
+微信读取、macOS 权限、Jev/Agent 的请求形状和分阶段实现顺序，见 [WECHAT-AGENT-JEV.md](./WECHAT-AGENT-JEV.md)。
+
+当前采用的实现决策是：先手动粘贴验证业务闭环，再接 macOS ScreenCaptureKit + Vision；不读取微信数据库、不注入微信、不把自动发送作为能力。
+
 ## 下一阶段
 
 1. 增加脱敏聊天导入和本地客户卡片。
