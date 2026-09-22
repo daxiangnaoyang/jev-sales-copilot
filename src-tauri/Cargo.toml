@@ -1,6 +1,6 @@
 [package]
 name = "jev-sales-copilot"
-version = "0.1.0"
+version = "0.0.1"
 description = "Jev 销售沟通副驾"
 authors = ["大象AI共学"]
 edition = "2021"

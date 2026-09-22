@@ -1,6 +1,6 @@
 {
   "name": "jev-sales-copilot",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Jev 销售沟通副驾：判断客户状态，生成下一步策略与产品素材任务。",
   "type": "module",
