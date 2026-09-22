@@ -95,3 +95,81 @@ export interface CustomerStrategy {
   humanConfirmationRequired: boolean;
   unsupportedClaims: string[];
 }
+
+export type ProductFactStatus = "provided" | "visible" | "pending" | "missing";
+
+export interface ProductFact {
+  id: string;
+  label: string;
+  value: string;
+  status: ProductFactStatus;
+  source: string;
+}
+
+export interface ProductImage {
+  id: string;
+  name: string;
+  previewUrl?: string;
+  source: "local-upload" | "not-uploaded";
+  note: string;
+}
+
+export interface ProductStoryboardScene {
+  id: string;
+  time: string;
+  task: string;
+  visual: string;
+  voiceover: string;
+  caption: string;
+  source: string;
+}
+
+export interface ProductDiagramCard {
+  id: string;
+  title: string;
+  body: string;
+  allowedText: string;
+  sourceFactId?: string;
+  sourceImageId?: string;
+}
+
+export type ProductOutputType = "recommendation" | "social-post" | "diagram" | "video-script";
+
+export interface ProductOutput {
+  id: string;
+  type: ProductOutputType;
+  title: string;
+  status: "DRAFT" | "READY_FOR_REVIEW";
+  text?: string;
+  cards?: ProductDiagramCard[];
+  scenes?: ProductStoryboardScene[];
+  factIds: string[];
+}
+
+export interface ProductWorkspace {
+  productName: string;
+  category: string;
+  audience: string;
+  scene: string;
+  platform: "朋友圈" | "小红书" | "视频号";
+  tone: "专业种草" | "亲切日常" | "活泼有趣";
+  ratio: "3:4" | "4:5" | "9:16";
+  videoDirection: "竖版 9:16 · 15 秒" | "横版 16:9 · 5—10 秒";
+  facts: ProductFact[];
+  images: ProductImage[];
+  outputs: ProductOutput[];
+  selectedOutputId?: string;
+  status: "COLLECTING" | "READY_FOR_REVIEW";
+}
+
+export interface ReviewRecord {
+  id: string;
+  customer: CustomerProfile;
+  messages: CustomerMessage[];
+  decision: JevDecision;
+  strategy: CustomerStrategy;
+  createdAt: string;
+  status: "待复盘" | "已复盘";
+  insight: string;
+  reusableRule: string;
+}
