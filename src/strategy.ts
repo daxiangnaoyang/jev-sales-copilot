@@ -1,7 +1,7 @@
 import type {
   CustomerMessage,
   CustomerStrategy,
-  JevDecision,
+  SalesDecision,
   SalesStage,
 } from "./types";
 
@@ -36,7 +36,7 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word));
 }
 
-export function judgeCustomerMessage(text: string): JevDecision {
+export function judgeCustomerMessage(text: string): SalesDecision {
   const normalized = text.trim().toLowerCase();
 
   if (includesAny(normalized, ["投诉", "不满意", "退款", "退货", "坏了", "被骗"])) {
@@ -114,7 +114,7 @@ export function judgeCustomerMessage(text: string): JevDecision {
 }
 
 export function buildStrategy(
-  decision: JevDecision,
+  decision: SalesDecision,
   latestMessage: string,
 ): CustomerStrategy {
   const isPrice = decision.intent === "price";
@@ -225,10 +225,10 @@ export function buildStrategy(
   };
 }
 
-export function createCustomerMessage(text: string): CustomerMessage {
+export function createCustomerMessage(text: string, sender: CustomerMessage["sender"] = "customer"): CustomerMessage {
   return {
     id: `message-${Date.now()}`,
-    sender: "customer",
+    sender,
     text,
     createdAt: now(),
   };

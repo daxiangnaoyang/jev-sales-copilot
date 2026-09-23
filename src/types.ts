@@ -39,7 +39,7 @@ export type NextAction =
 
 export interface CustomerMessage {
   id: string;
-  sender: "customer" | "seller";
+  sender: "customer" | "seller" | "transcript";
   text: string;
   createdAt: string;
 }
@@ -54,7 +54,15 @@ export interface CustomerProfile {
   note: string;
 }
 
-export interface JevDecision {
+export interface CustomerConversation {
+  profile: CustomerProfile;
+  messages: CustomerMessage[];
+  decision: SalesDecision;
+  strategy: CustomerStrategy;
+  sourceConversationTitle?: string;
+}
+
+export interface SalesDecision {
   intent: Intent;
   stage: SalesStage;
   customerNeed: CustomerNeed;
@@ -166,10 +174,19 @@ export interface ReviewRecord {
   id: string;
   customer: CustomerProfile;
   messages: CustomerMessage[];
-  decision: JevDecision;
+  decision: SalesDecision;
   strategy: CustomerStrategy;
   createdAt: string;
   status: "待复盘" | "已复盘";
   insight: string;
   reusableRule: string;
+}
+
+export interface BochaSearchResult {
+  title: string;
+  url: string;
+  siteName: string;
+  snippet: string;
+  summary: string;
+  publishedDate?: string;
 }

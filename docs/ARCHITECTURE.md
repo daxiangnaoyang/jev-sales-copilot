@@ -2,18 +2,20 @@
 
 ## 一句话
 
-这是一个独立的桌面 App：Jev 负责把客户对话压缩成结构化判断，Agent 负责生成一条可执行的下一步策略，Skill 负责生成产品素材，用户负责最终发送。
+这是一个独立桌面 App：本机规则把客户对话压缩成结构化销售判断，Agent 可生成下一步策略；博查仅按用户指令搜索公开资料；Skill 负责产品素材，用户负责最终发送。
 
 ```text
 Conversation Adapter
         ↓
-JevDecisionProvider
+LocalSalesDecision
         ↓
-AgentStrategyProvider
+Optional AgentStrategyProvider
         ↓
 Skill Adapter: product-showcase
         ↓
 Human Review → Copy / Fill → Human Send
+
+Explicit public query → Bocha Web Search → displayed sources only
 ```
 
 ## 运行边界
@@ -24,15 +26,22 @@ Human Review → Copy / Fill → Human Send
 - 保存当前会话的临时状态，后续再增加本地 SQLite。
 - 提供复制和未来的输入框填入，不提供自动发送。
 
-### Jev
+### 本机销售判断
 
-- 判断客户意图、销售阶段、需求、温度、商业风险、缺失事实和下一步动作。
-- 输出 `JevDecision`，只允许有限枚举、分数和置信度。
+- 本机根据聊天文本判断客户意图、销售阶段、需求、温度、商业风险、缺失事实和下一步动作。
+- 输出 `SalesDecision`，只允许有限枚举、分数和置信度；不调用 Jev 云端服务。
 - 低置信度时要求人工复核，不让自由文本覆盖结构化判断。
+
+### 博查 Web Search
+
+- 博查是独立的公开网页搜索 API，不是对话分类或 Chat Completions 模型。
+- 仅搜索设置中用户单独填写、当次勾选确认并点击提交的查询词；查询长度限制为 200 字符。
+- 不从聊天、客户卡片或 OCR 自动构造查询；搜索结果只显示在设置页，不自动传入 Agent。
+- API Key 只在 UI 运行内存及当前 Tauri 调用中使用，不写入持久化存储或日志。
 
 ### Agent
 
-- 接收 `JevDecision`、最近对话、客户资料和产品事实卡。
+- 接收 `SalesDecision`、当前对话和产品事实卡。
 - 只生成一个最高优先级动作、一个关键问题、候选回复和跟进条件。
 - 不创造价格、折扣、交期、案例、评价或产品功效。
 
@@ -41,12 +50,13 @@ Human Review → Copy / Fill → Human Send
 - 产品素材工作区负责收集产品事实卡、导入产品图、生成推荐语、朋友圈文案、电商卖点图解结构和 15 秒视频脚本。
 - 只在客户需要资料、产品对比或转发内容时按需调用。
 - 当前本地产出为 `READY_FOR_REVIEW` 或 `DRAFT`；无真实图像/视频能力时输出结构、Prompt 和素材缺口，不伪称成片。
+- 产品事实、产品图、当前会话与复盘记录保存在本机 WebView 存储；不自动上传。产品图缩放后作为本地预览数据保存。
 
 ### 沟通复盘
 
-- 每次生成策略都会生成一条本地 `ReviewRecord`，保留当时的对话、Jev 判断、Agent 策略和风险。
+- 每次生成策略都会生成一条本地 `ReviewRecord`，保留当时的对话、本机销售判断、Agent 策略和风险。
 - 复盘页允许标记“已复盘”，并显示可复用规则和本轮停止条件。
-- 当前状态只在演示会话内保存，后续接本地 SQLite 时再增加检索、标签和结果回填。
+- 本地复盘记录随应用状态保存；后续再增加 SQLite 检索、标签、结果回填和用户可控的数据清理/导出。
 
 ## 状态机
 
@@ -60,22 +70,22 @@ Human Review → Copy / Fill → Human Send
 
 ## Provider 接口
 
-`src/providers.ts` 是真实服务的替换边界：
+`src/providers.ts` 负责 Agent 策略的本机 Demo 边界；销售判断由 `src/strategy.ts` 规则函数确定：
 
-- `JevDecisionProvider.judge(messages)`：未来接 TypeSafe Jev、兼容网关或本地模型。
-- `AgentStrategyProvider.generate(input)`：未来接 CLI Agent、OpenAI 兼容 API 或本地 Agent。
-- Demo Provider 作为离线回归和无密钥演示，不应被误认为真实模型结果。
+- `judgeCustomerMessage(text)`：无网络调用的本机结构化判断。
+- `AgentStrategyProvider.generate(input)`：本机 Demo 策略；Tauri `agent_strategy` 支持用户配置的本机或 OpenAI-compatible Agent。
+- API Key 只驻留 UI 运行内存，不自动保存。云端 Agent 另需同意本轮文本外发。
 
 ## 微信与真实模型接入
 
-微信读取、macOS 权限、Jev/Agent 的请求形状和分阶段实现顺序，见 [WECHAT-AGENT-JEV.md](./WECHAT-AGENT-JEV.md)。
+微信读取、macOS 权限、Agent 与博查请求边界，见 [WECHAT-AGENT-JEV.md](./WECHAT-AGENT-JEV.md)。
 
-当前采用的实现决策是：先手动粘贴验证业务闭环，再接 macOS ScreenCaptureKit + Vision；不读取微信数据库、不注入微信、不把自动发送作为能力。
+当前微信适配按 macOS 路径实现。名单导入不在启动时运行，只在用户显式点击后才截取一帧并 OCR 左侧可见候选，不 OCR 右侧聊天正文。名称含明显群聊标记会跳过，但名称 OCR 无法证明无标记候选一定是单聊；当前也只扫描可见行、不自动翻页，因此“最近 20 个单聊且绝不含群聊”仍未验收，不能视为已满足。窗口所有者需匹配微信 bundle id/精确名称，最小窗口尺寸过滤排除常见子窗口；回填还校验输入框位于目标微信窗口且只选择最大聊天文本区，已有草稿则拒绝覆盖。用户另行点击“读取当前会话”后，才 OCR 聊天窗口并进入分析流程；本机判断不外发，云端 Agent 仍需独立同意。博查不会接收任何会话或客户数据，只会收到手动确认的查询词。截图和 OCR 不写入日志或默认落盘；屏幕采集需“屏幕录制”，回填需“辅助功能”。不读取微信数据库、不注入微信、不自动发送。此前记录显示 ScreenCaptureKit 曾返回 `-3801`；当前权限与真实 OCR 结果须在此次安装包运行中重新核实。OCR 聊天文本仍作为“未区分说话方”的记录，不冒充说话人分段。
 
 ## 下一阶段
 
-1. 增加脱敏聊天导入和本地客户卡片。
-2. 用 30—50 条脱敏对话建立意图、阶段、风险和动作标注集。
-3. 接真实 Jev Provider，并保留 Demo Provider 做离线回归。
+1. 用脱敏对话集评估并改进本机意图、阶段、风险和动作判断规则。
+2. 用用户自己的博查 API Key，在确认后完成一轮公开查询集成验收。
+3. 先证明单聊分类与列表滚动安全，再扩大微信名单导入。
 4. 将产品事实卡和 `product-showcase` 输出接到真实图像/视频任务执行器。
-5. 最后增加 macOS 屏幕采集和输入框填入适配器，自动发送永远不在默认范围内。
+5. 保持输入框回填与人工发送分离；不实现自动发送。

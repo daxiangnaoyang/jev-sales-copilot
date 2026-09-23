@@ -16,3 +16,23 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+accessibility-sys = "0.2.0"
+core-foundation-sys = "0.8"
+block2 = "0.6.2"
+objc2 = { version = "0.6.4", features = ["std"] }
+objc2-core-foundation = { version = "0.3.2", features = ["CFCGTypes"] }
+objc2-core-graphics = { version = "0.3.2", features = ["CGImage"] }
+objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSDictionary", "NSError", "NSObject", "NSString"] }
+objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["SCShareableContent", "SCStream", "SCScreenshotManager", "block2", "libc", "objc2-core-foundation", "objc2-core-graphics"] }
+objc2-vision = { version = "0.3.2", default-features = false, features = ["VNRecognizeTextRequest", "VNRequest", "VNObservation", "VNRequestHandler", "VNTypes", "objc2-core-foundation", "objc2-core-graphics"] }
+serde = { version = "1", features = ["derive"] }
+
+# macOS 27 dyld rejects stripped build-script/proc-macro dylibs whose LINKEDIT
+# string pool is not 8-byte aligned. Keep compile-time host tools unstripped;
+# the shipped application still follows the normal release profile.
+[profile.release.build-override]
+strip = false

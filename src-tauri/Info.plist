@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>微信窗口截图仅在本机 OCR。启动导入只识别会话列表中的客户名称，不读取聊天正文；手动选择“读取当前会话”后才识别当前会话，云端分析还需在 App 内单独同意。App 不会自动发送微信消息。</string>
+</dict>
+</plist>
