@@ -63,6 +63,7 @@ export interface CustomerConversation {
 }
 
 export interface SalesDecision {
+  source?: "bocha-jev" | "demo";
   intent: Intent;
   stage: SalesStage;
   customerNeed: CustomerNeed;
@@ -180,13 +181,4 @@ export interface ReviewRecord {
   status: "待复盘" | "已复盘";
   insight: string;
   reusableRule: string;
-}
-
-export interface BochaSearchResult {
-  title: string;
-  url: string;
-  siteName: string;
-  snippet: string;
-  summary: string;
-  publishedDate?: string;
 }

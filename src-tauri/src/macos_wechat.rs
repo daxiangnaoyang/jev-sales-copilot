@@ -20,6 +20,95 @@ const WECHAT_BUNDLE: &str = "com.tencent.xinWeChat";
 const WECHAT_NAMES: [&str; 3] = ["微信", "WeChat", "Weixin"];
 const MIN_WINDOW_WIDTH: f64 = 600.0;
 const MIN_WINDOW_HEIGHT: f64 = 400.0;
+const BOCHA_JEV_ENDPOINT: &str = "https://jev.bocha.cn/v1/systemone";
+const BOCHA_JEV_MODEL: &str = "bocha-jev-v1";
+const BOCHA_JEV_MAX_STATE_CHARS: usize = 300;
+const BOCHA_JEV_MAX_BODY_BYTES: usize = 256 * 1024;
+
+const INTENT_CANDIDATES: &[(&str, &str)] = &[
+    ("discover", "了解需求或初次咨询"),
+    ("product_info", "询问产品信息或功能"),
+    ("compare_product", "比较产品、型号或方案"),
+    ("price", "询问价格、预算或优惠"),
+    ("request_material", "索要图片、资料或介绍"),
+    ("objection", "表达顾虑、异议或拒绝"),
+    ("complaint", "投诉、售后或要求退款"),
+    ("follow_up", "跟进已有沟通或待办"),
+    ("unknown", "证据不足，无法判断"),
+];
+const STAGE_CANDIDATES: &[(&str, &str)] = &[
+    ("new_lead", "新线索，尚未了解需求"),
+    ("discovery", "正在了解需求和场景"),
+    ("evaluation", "正在比较和评估产品"),
+    ("negotiation", "正在讨论价格或条件"),
+    ("decision", "已接近购买或最终决策"),
+    ("after_sales", "购买后服务或问题处理"),
+    ("paused", "沟通暂缓或暂时没有进展"),
+];
+const NEED_CANDIDATES: &[(&str, &str)] = &[
+    ("information", "需要基础信息或解释"),
+    ("fit", "需要判断产品是否适合"),
+    ("proof", "需要证据、案例或可信依据"),
+    ("price", "需要价格或预算信息"),
+    ("risk", "需要消除风险或解决问题"),
+    ("timeline", "需要确认时间安排"),
+    ("next_step", "需要明确下一步安排"),
+    ("unknown", "现有证据不足以判断"),
+];
+const ROLE_CANDIDATES: &[(&str, &str)] = &[
+    ("user", "本人是使用者"),
+    ("champion", "内部支持或推动者"),
+    ("buyer", "采购或付款决策者"),
+    ("blocker", "可能阻止或限制决策者"),
+    ("unknown", "无法从对话判断角色"),
+];
+const ACTION_CANDIDATES: &[(&str, &str)] = &[
+    ("answer_and_ask", "先回答，再问一个关键问题"),
+    ("send_asset_and_ask", "发送匹配资料并确认需求"),
+    ("clarify_before_quote", "补齐条件后再报价"),
+    ("address_objection", "针对顾虑回应并核实"),
+    ("escalate_human", "转人工或主管核实处理"),
+    ("confirm_next_step", "确认双方约定的下一步"),
+    ("wait_and_follow_up", "暂缓打扰并约定跟进"),
+];
+const MISSING_FACT_CANDIDATES: &[(&str, &str)] = &[
+    ("none", "当前信息已足够，没有明显关键缺口"),
+    ("customer_goal", "客户最主要的目标或痛点"),
+    ("usage_scenario", "实际使用场景"),
+    ("specification", "偏好的型号、配置或规格"),
+    ("budget", "预算范围"),
+    ("quantity", "采购数量"),
+    ("timeline", "计划购买或落地时间"),
+    ("decision_role", "决策参与者或审批关系"),
+    ("comparison_priority", "最看重的比较维度"),
+    ("policy", "需要确认的政策或承诺边界"),
+    ("order_info", "订单号或购买记录"),
+    ("issue_detail", "问题现象、发生时间与客户诉求"),
+];
+const TEMPERATURE_LEVELS: &[&str] = &[
+    "没有兴趣或明确拒绝推进",
+    "兴趣极低，只有礼貌回应",
+    "兴趣较低，尚无具体需求",
+    "有初步关注，仍在观望",
+    "中性了解，意向尚不明确",
+    "出现具体需求或比较行为",
+    "主动询问关键细节或资料",
+    "积极确认条件和购买安排",
+    "明确表达较强购买意向",
+    "明确要求立即成交或执行",
+];
+const RISK_LEVELS: &[&str] = &[
+    "没有明显商业或沟通风险",
+    "轻微信息缺口，常规核实即可",
+    "存在一般误解或预期偏差风险",
+    "涉及未核实的产品或交付细节",
+    "价格、库存或承诺需谨慎核实",
+    "有明显投诉、退款或合同风险",
+    "可能涉及重大经济损失或升级处理",
+    "高风险争议，需主管或专业人员确认",
+    "严重合规、法律或隐私风险",
+    "极高风险，应立即停止承诺并升级",
+];
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
@@ -68,110 +157,248 @@ pub struct ProviderCheck {
     pub models: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BochaSearchResultDto {
-    pub title: String,
-    pub url: String,
-    pub site_name: String,
-    pub snippet: String,
-    pub summary: String,
-    pub published_date: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BochaSearchResponseDto {
-    pub results: Vec<BochaSearchResultDto>,
-}
-
 #[command]
 pub fn request_screen_capture_access() -> bool {
     unsafe { CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() }
 }
 
 #[command]
-pub async fn bocha_search(
-    query: String,
-    api_key: String,
-) -> Result<BochaSearchResponseDto, String> {
-    let query = validate_bocha_query(&query)?;
-    let api_key = api_key.trim();
-    if api_key.is_empty() {
-        return Err("请先填写博查 API Key。".into());
-    }
+pub async fn bocha_jev_decide(state: String, api_key: String) -> Result<SalesDecisionDto, String> {
+    let state = validate_bocha_jev_state(&state)?;
+    let env_key = std::env::var("BOCHA_JEV_API_KEY").ok();
+    let search_key = std::env::var("BOCHA_SEARCH_API_KEY").ok();
+    let api_key = resolve_bocha_jev_key(&api_key, env_key.as_deref(), search_key.as_deref())
+        .ok_or_else(|| {
+            "请在模型设置中填写 Bocha Jev API Key，或在启动环境配置 BOCHA_JEV_API_KEY。".to_string()
+        })?;
+    let body = build_bocha_jev_payload(state)?;
     let response = http_client()?
-        .post("https://api.bochaai.com/v1/web-search")
+        .post(BOCHA_JEV_ENDPOINT)
         .bearer_auth(api_key)
-        .json(&serde_json::json!({"query":query,"summary":true,"count":8}))
+        .header(reqwest::header::CONTENT_TYPE, "application/json")
+        .body(body)
         .send()
         .await
-        .map_err(|e| format!("博查搜索请求失败：{e}"))?;
+        .map_err(|_| "Bocha Jev 网络请求失败或连接超时；没有生成判断。".to_string())?;
     let status = response.status();
-    let payload: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|_| "博查返回内容不是有效 JSON。".to_string())?;
     if !status.is_success() {
-        return Err(format!("博查搜索返回 {status}：{}", api_error(&payload)));
+        return Err(match status.as_u16() {
+            401 => "Bocha Jev API Key 无效或当前账号没有访问权限（HTTP 401）。".to_string(),
+            413 | 422 => "Bocha Jev 拒绝了请求格式或内容长度；请缩短对话后重试。".to_string(),
+            429 => "Bocha Jev 请求过于频繁（HTTP 429）；稍后再试。".to_string(),
+            _ => format!("Bocha Jev 请求未成功（HTTP {status}）；没有生成判断。"),
+        });
     }
-    Ok(BochaSearchResponseDto {
-        results: parse_bocha_search_results(&payload)?,
+    if response
+        .content_length()
+        .is_some_and(|length| length > BOCHA_JEV_MAX_BODY_BYTES as u64)
+    {
+        return Err("Bocha Jev 响应超过允许大小；没有生成判断。".into());
+    }
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|_| "无法读取 Bocha Jev 响应；没有生成判断。".to_string())?;
+    if bytes.len() > BOCHA_JEV_MAX_BODY_BYTES {
+        return Err("Bocha Jev 响应超过允许大小；没有生成判断。".into());
+    }
+    let payload: serde_json::Value = serde_json::from_slice(&bytes)
+        .map_err(|_| "Bocha Jev 返回的内容不是有效 JSON；没有生成判断。".to_string())?;
+    parse_bocha_jev_decision(&payload)
+}
+
+#[command]
+pub async fn check_bocha_jev_provider(api_key: String) -> Result<String, String> {
+    let env_key = std::env::var("BOCHA_JEV_API_KEY").ok();
+    let search_key = std::env::var("BOCHA_SEARCH_API_KEY").ok();
+    let api_key = resolve_bocha_jev_key(&api_key, env_key.as_deref(), search_key.as_deref())
+        .ok_or_else(|| {
+            "请填写 Bocha Jev API Key，或在启动环境配置 BOCHA_JEV_API_KEY。".to_string()
+        })?;
+    let response = http_client()?
+        .get("https://jev.bocha.cn/v1/models")
+        .bearer_auth(api_key)
+        .send()
+        .await
+        .map_err(|_| "Bocha Jev 连接失败或请求超时；没有提交客户对话。".to_string())?;
+    let status = response.status();
+    if status.is_success() {
+        return Ok("连接成功（GET /v1/models）；未提交客户对话，也未调用决策模型。".into());
+    }
+    Err(match status.as_u16() {
+        401 => "Bocha Jev API Key 无效或当前账号没有访问权限（HTTP 401）。".to_string(),
+        429 => "Bocha Jev 连通性检查请求过于频繁（HTTP 429）；稍后再试。".to_string(),
+        _ => format!("Bocha Jev 连通性检查未成功（HTTP {status}）；未提交客户对话。"),
     })
 }
 
-fn validate_bocha_query(query: &str) -> Result<&str, String> {
-    let query = query.trim();
-    if query.is_empty() {
-        return Err("请填写公开搜索词。".into());
-    }
-    if query.chars().count() > 200 {
-        return Err("公开搜索词最多 200 个字符。".into());
-    }
-    Ok(query)
+fn resolve_bocha_jev_key(
+    provided: &str,
+    env_key: Option<&str>,
+    search_key: Option<&str>,
+) -> Option<String> {
+    [Some(provided), env_key, search_key]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|value| !value.is_empty())
+        .map(str::to_owned)
 }
 
-fn parse_bocha_search_results(
-    payload: &serde_json::Value,
-) -> Result<Vec<BochaSearchResultDto>, String> {
-    let values = payload
-        .get("webPages")
-        .and_then(|pages| pages.get("value"))
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| "博查响应缺少 webPages.value 搜索结果。".to_string())?;
-    Ok(values
-        .iter()
-        .filter_map(|item| {
-            let url = item.get("url")?.as_str()?.trim();
-            if !url.starts_with("https://") {
-                return None;
-            }
-            Some(BochaSearchResultDto {
-                title: item.get("name")?.as_str()?.to_string(),
-                url: url.to_string(),
-                site_name: item
-                    .get("siteName")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                snippet: item
-                    .get("snippet")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                summary: item
-                    .get("summary")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or_default()
-                    .to_string(),
-                published_date: item
-                    .get("datePublished")
-                    .and_then(serde_json::Value::as_str)
-                    .map(str::to_owned),
+fn validate_bocha_jev_state(state: &str) -> Result<&str, String> {
+    let state = state.trim();
+    if state.is_empty() {
+        return Err("请先添加需要分析的对话内容。".into());
+    }
+    if state.chars().count() > BOCHA_JEV_MAX_STATE_CHARS {
+        return Err(format!(
+            "本轮发送给 Bocha Jev 的对话最多 {} 个字符；请先缩短或整理内容。",
+            BOCHA_JEV_MAX_STATE_CHARS
+        ));
+    }
+    Ok(state)
+}
+
+fn choice_criteria(candidates: &[(&str, &str)]) -> serde_json::Value {
+    serde_json::Value::Object(
+        candidates
+            .iter()
+            .map(|(key, description)| {
+                (
+                    (*key).to_string(),
+                    serde_json::Value::String((*description).to_string()),
+                )
             })
-        })
-        .take(8)
-        .collect())
+            .collect(),
+    )
+}
+
+fn build_bocha_jev_payload(state: &str) -> Result<Vec<u8>, String> {
+    let score_criteria = |levels: &[&str]| {
+        levels
+            .iter()
+            .enumerate()
+            .map(|(index, description)| format!("{index}/9：{description}"))
+            .collect::<Vec<_>>()
+    };
+    let questions = serde_json::json!({
+        "intent": {"type":"choice", "instructions":"根据对话识别客户本轮主要意图；证据不足选 unknown。", "criteria":choice_criteria(INTENT_CANDIDATES)},
+        "stage": {"type":"choice", "instructions":"判断当前销售阶段；只依据提供的对话。", "criteria":choice_criteria(STAGE_CANDIDATES)},
+        "customer_need": {"type":"choice", "instructions":"判断客户当前最主要的需要。", "criteria":choice_criteria(NEED_CANDIDATES)},
+        "temperature": {"type":"score", "instructions":"按购买或推进意向强度评分，低到高。", "criteria":score_criteria(TEMPERATURE_LEVELS)},
+        "commercial_risk": {"type":"score", "instructions":"按沟通、承诺、投诉及合规风险评分，低到高。", "criteria":score_criteria(RISK_LEVELS)},
+        "decision_role": {"type":"choice", "instructions":"判断发言人在购买决策中的角色；证据不足选 unknown。", "criteria":choice_criteria(ROLE_CANDIDATES)},
+        "should_reply_now": {"type":"noul", "instructions":"判断销售现在是否应该及时回应客户。", "criteria":{"false":"暂不适合立即回复；先补事实或等待合适时机。","true":"现在应及时承接客户本轮沟通。"}},
+        "next_action": {"type":"choice", "instructions":"选择当前最优先且可执行的一项销售动作。", "criteria":choice_criteria(ACTION_CANDIDATES)},
+        "missing_fact": {"type":"choice", "instructions":"选择继续推进前最关键的一个信息缺口；没有明显缺口选 none。", "criteria":choice_criteria(MISSING_FACT_CANDIDATES)}
+    });
+    let payload = serde_json::json!({
+        "model": BOCHA_JEV_MODEL,
+        "state": state,
+        "questions": questions
+    });
+    let body = serde_json::to_vec(&payload).map_err(|_| "无法构造 Bocha Jev 请求。".to_string())?;
+    if body.len() > BOCHA_JEV_MAX_BODY_BYTES {
+        return Err("Bocha Jev 请求超过 256 KiB 限制；请缩短输入。".into());
+    }
+    Ok(body)
+}
+
+fn parse_bocha_jev_decision(payload: &serde_json::Value) -> Result<SalesDecisionDto, String> {
+    let answers = payload
+        .get("answers")
+        .ok_or_else(|| "Bocha Jev 响应缺少 answers。".to_string())?;
+    let (intent, intent_confidence) = parse_choice_answer(answers, "intent", INTENT_CANDIDATES)?;
+    let (stage, stage_confidence) = parse_choice_answer(answers, "stage", STAGE_CANDIDATES)?;
+    let (customer_need, need_confidence) =
+        parse_choice_answer(answers, "customer_need", NEED_CANDIDATES)?;
+    let (temperature, temperature_confidence) = parse_score_answer(answers, "temperature")?;
+    let (commercial_risk, risk_confidence) = parse_score_answer(answers, "commercial_risk")?;
+    let (decision_role, role_confidence) =
+        parse_choice_answer(answers, "decision_role", ROLE_CANDIDATES)?;
+    let should_reply_probability = answers
+        .get("should_reply_now")
+        .filter(|answer| answer.get("type").and_then(serde_json::Value::as_str) == Some("noul"))
+        .and_then(|answer| answer.get("noul"))
+        .and_then(serde_json::Value::as_f64)
+        .filter(|probability| probability.is_finite() && (0.0..=1.0).contains(probability))
+        .ok_or_else(|| "Bocha Jev 的 should_reply_now Noul 答案无效。".to_string())?;
+    let (next_action, action_confidence) =
+        parse_choice_answer(answers, "next_action", ACTION_CANDIDATES)?;
+    let (missing_fact, missing_confidence) =
+        parse_choice_answer(answers, "missing_fact", MISSING_FACT_CANDIDATES)?;
+    let missing_facts = if missing_fact == "none" {
+        Vec::new()
+    } else {
+        MISSING_FACT_CANDIDATES
+            .iter()
+            .find(|(id, _)| *id == missing_fact)
+            .map(|(_, description)| vec![(*description).to_string()])
+            .ok_or_else(|| "Bocha Jev 返回了未定义的信息缺口。".to_string())?
+    };
+    let confidence = [
+        intent_confidence,
+        stage_confidence,
+        need_confidence,
+        temperature_confidence,
+        risk_confidence,
+        role_confidence,
+        action_confidence,
+        missing_confidence,
+    ]
+    .into_iter()
+    .fold(1.0_f64, f64::min);
+    Ok(SalesDecisionDto {
+        intent,
+        stage,
+        customer_need,
+        temperature,
+        commercial_risk,
+        decision_role,
+        should_reply_now: should_reply_probability >= 0.6,
+        next_action,
+        missing_facts,
+        confidence,
+        source: "bocha-jev".into(),
+    })
+}
+
+fn answer_confidence(answer: &serde_json::Value, id: &str) -> Result<f64, String> {
+    answer
+        .get("confidence")
+        .and_then(serde_json::Value::as_f64)
+        .filter(|value| value.is_finite() && (0.0..=1.0).contains(value))
+        .ok_or_else(|| format!("Bocha Jev 的 {id} confidence 无效。"))
+}
+
+fn parse_choice_answer(
+    answers: &serde_json::Value,
+    id: &str,
+    candidates: &[(&str, &str)],
+) -> Result<(String, f64), String> {
+    let answer = answers
+        .get(id)
+        .filter(|answer| answer.get("type").and_then(serde_json::Value::as_str) == Some("choice"))
+        .ok_or_else(|| format!("Bocha Jev 的 {id} Choice 答案缺失或类型错误。"))?;
+    let choice = answer
+        .get("choice")
+        .and_then(serde_json::Value::as_str)
+        .filter(|choice| candidates.iter().any(|(candidate, _)| candidate == choice))
+        .ok_or_else(|| format!("Bocha Jev 返回了未定义的 {id} 候选项。"))?;
+    Ok((choice.to_string(), answer_confidence(answer, id)?))
+}
+
+fn parse_score_answer(answers: &serde_json::Value, id: &str) -> Result<(u8, f64), String> {
+    let answer = answers
+        .get(id)
+        .filter(|answer| answer.get("type").and_then(serde_json::Value::as_str) == Some("score"))
+        .ok_or_else(|| format!("Bocha Jev 的 {id} Score 答案缺失或类型错误。"))?;
+    let score = answer
+        .get("score")
+        .and_then(serde_json::Value::as_f64)
+        .filter(|score| score.is_finite() && (0.0..=9.0).contains(score))
+        .ok_or_else(|| format!("Bocha Jev 的 {id} Score 超出 0–9 范围。"))?;
+    Ok((score.round() as u8, answer_confidence(answer, id)?))
 }
 
 #[command]
@@ -248,6 +475,8 @@ async fn provider_check(response: reqwest::Response, label: &str) -> Result<Prov
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SalesDecisionDto {
+    #[serde(default)]
+    pub source: String,
     pub intent: String,
     pub stage: String,
     pub customer_need: String,
@@ -1209,28 +1438,98 @@ mod tests {
         assert!(validate_agent_endpoint("https://api.example.com/v1?token=secret").is_err());
     }
 
-    #[test]
-    fn bocha_query_is_trimmed_and_bounded_without_logging_or_transcript_context() {
-        assert_eq!(
-            validate_bocha_query("  官方续航参数  ").unwrap(),
-            "官方续航参数"
-        );
-        assert!(validate_bocha_query("   ").is_err());
-        assert!(validate_bocha_query(&"x".repeat(201)).is_err());
+    fn bocha_jev_fixture() -> serde_json::Value {
+        serde_json::json!({
+            "model": "bocha-jev-v1",
+            "answers": {
+                "intent": {"type":"choice", "choice":"price", "confidence":0.91, "probabilities":{"price":0.91}},
+                "stage": {"type":"choice", "choice":"negotiation", "confidence":0.83, "probabilities":{"negotiation":0.83}},
+                "customer_need": {"type":"choice", "choice":"price", "confidence":0.79, "probabilities":{"price":0.79}},
+                "temperature": {"type":"score", "score":6.7, "confidence":0.77, "probabilities":{"7":0.7}},
+                "commercial_risk": {"type":"score", "score":2.4, "confidence":0.72, "probabilities":{"2":0.6}},
+                "decision_role": {"type":"choice", "choice":"buyer", "confidence":0.88, "probabilities":{"buyer":0.88}},
+                "should_reply_now": {"type":"noul", "noul":0.72},
+                "next_action": {"type":"choice", "choice":"clarify_before_quote", "confidence":0.81, "probabilities":{"clarify_before_quote":0.81}},
+                "missing_fact": {"type":"choice", "choice":"budget", "confidence":0.74, "probabilities":{"budget":0.74}}
+            }
+        })
     }
 
     #[test]
-    fn bocha_results_parse_public_web_fields_and_reject_non_https_urls() {
-        let payload = serde_json::json!({"webPages":{"value":[
-            {"name":"官方规格","url":"https://example.com/spec","siteName":"官网","snippet":"参数摘要","summary":"官方页面说明","datePublished":"2026-09-01"},
-            {"name":"不安全链接","url":"http://example.com/"}
-        ]}});
-        let results = parse_bocha_search_results(&payload).unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].title, "官方规格");
-        assert_eq!(results[0].summary, "官方页面说明");
-        assert_eq!(results[0].published_date.as_deref(), Some("2026-09-01"));
-        assert!(parse_bocha_search_results(&serde_json::json!({})).is_err());
+    fn bocha_jev_request_uses_only_documented_typed_decisions_and_bounds() {
+        assert_eq!(
+            validate_bocha_jev_state("  客户：预算一万，关注影像  ").unwrap(),
+            "客户：预算一万，关注影像"
+        );
+        assert!(validate_bocha_jev_state("  ").is_err());
+        assert!(validate_bocha_jev_state(&"客".repeat(BOCHA_JEV_MAX_STATE_CHARS + 1)).is_err());
+        let body = build_bocha_jev_payload("客户：预算一万，关注影像").unwrap();
+        assert!(body.len() <= BOCHA_JEV_MAX_BODY_BYTES);
+        let payload: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["model"], BOCHA_JEV_MODEL);
+        assert_eq!(payload["state"], "客户：预算一万，关注影像");
+        let questions = payload["questions"].as_object().unwrap();
+        assert_eq!(questions.len(), 9);
+        assert_eq!(questions["intent"]["type"], "choice");
+        assert_eq!(questions["temperature"]["type"], "score");
+        assert_eq!(questions["should_reply_now"]["type"], "noul");
+        assert_eq!(
+            questions["temperature"]["criteria"]
+                .as_array()
+                .unwrap()
+                .len(),
+            10
+        );
+        assert!(payload.get("stream").is_none());
+        assert!(payload.get("temperature").is_none());
+    }
+
+    #[test]
+    fn bocha_jev_typed_answers_map_into_sales_decision_without_free_text() {
+        let decision = parse_bocha_jev_decision(&bocha_jev_fixture()).unwrap();
+        assert_eq!(decision.source, "bocha-jev");
+        assert_eq!(decision.intent, "price");
+        assert_eq!(decision.stage, "negotiation");
+        assert_eq!(decision.customer_need, "price");
+        assert_eq!(decision.temperature, 7);
+        assert_eq!(decision.commercial_risk, 2);
+        assert_eq!(decision.decision_role, "buyer");
+        assert!(decision.should_reply_now);
+        assert_eq!(decision.next_action, "clarify_before_quote");
+        assert_eq!(decision.missing_facts, vec!["预算范围"]);
+        assert!((decision.confidence - 0.72).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn bocha_jev_rejects_invalid_candidates_scores_and_boolean_noul() {
+        let mut payload = bocha_jev_fixture();
+        payload["answers"]["intent"]["choice"] = serde_json::json!("free_text");
+        assert!(parse_bocha_jev_decision(&payload).is_err());
+
+        let mut payload = bocha_jev_fixture();
+        payload["answers"]["temperature"]["score"] = serde_json::json!(10.0);
+        assert!(parse_bocha_jev_decision(&payload).is_err());
+
+        let mut payload = bocha_jev_fixture();
+        payload["answers"]["should_reply_now"]["noul"] = serde_json::json!(true);
+        assert!(parse_bocha_jev_decision(&payload).is_err());
+    }
+
+    #[test]
+    fn bocha_jev_key_prefers_ui_then_jev_environment_then_search_environment() {
+        assert_eq!(
+            resolve_bocha_jev_key(" ui ", Some("env"), Some("search")).as_deref(),
+            Some("ui")
+        );
+        assert_eq!(
+            resolve_bocha_jev_key("", Some(" env "), Some("search")).as_deref(),
+            Some("env")
+        );
+        assert_eq!(
+            resolve_bocha_jev_key("", None, Some(" search ")).as_deref(),
+            Some("search")
+        );
+        assert_eq!(resolve_bocha_jev_key(" ", None, None), None);
     }
 
     #[test]

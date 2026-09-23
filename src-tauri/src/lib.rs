@@ -12,7 +12,8 @@ pub fn run() {
         macos_wechat::fill_wechat_input,
         macos_wechat::agent_strategy,
         macos_wechat::check_agent_provider,
-        macos_wechat::bocha_search
+        macos_wechat::check_bocha_jev_provider,
+        macos_wechat::bocha_jev_decide
     ]);
 
     builder

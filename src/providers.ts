@@ -10,8 +10,8 @@ export interface AgentStrategyProvider {
 }
 
 /**
- * Offline strategy provider. Customer judgment stays deterministic and local;
- * this adapter only builds the next-step strategy from that judgment.
+ * Offline strategy demo. It consumes the supplied structured decision;
+ * live conversations use Bocha Jev, while seed data is labeled as a sample.
  */
 export const demoStrategyProvider: AgentStrategyProvider = {
   id: "demo-agent",

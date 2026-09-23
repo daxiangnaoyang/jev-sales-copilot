@@ -163,16 +163,10 @@ button:focus-visible, textarea:focus-visible { outline: 2px solid rgba(243, 138,
 .provider-action { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
 .provider-action span { color: #77737c; font-size: 8px; line-height: 1.45; }
 .provider-result { padding: 8px 10px; border: 1px solid rgba(84,210,161,.18); border-radius: 7px; color: #9bcab4; background: rgba(84,210,161,.04); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
-.bocha-results { grid-column: 1 / -1; display: grid; gap: 8px; max-height: 280px; overflow-y: auto; }
-.bocha-result { padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: rgba(255,255,255,.018); }
-.bocha-result strong, .bocha-result small, .bocha-result span { display: block; overflow-wrap: anywhere; }
-.bocha-result strong { color: #d7d2db; font-size: 9px; }
-.bocha-result small { margin-top: 4px; color: #8f8b94; font-size: 8px; }
-.bocha-result p { margin: 6px 0 4px; color: #a5a1a9; font-size: 8px; line-height: 1.5; }
-.bocha-result span { color: #75717a; font-size: 7px; }
 .provider-disclosure { margin: 0; }
 .provider-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; padding-top: 12px; }
 .provider-fields > label:not(.provider-toggle) { display: grid; gap: 5px; color: #9a969f; }
+.provider-fields > .provider-result, .provider-fields > .consent-toggle { grid-column: 1 / -1; }
 .provider-fields input:not([type="checkbox"]) { min-width: 0; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; color: #e3dfe6; background: #121318; font-size: 10px; }
 .provider-fields select { width: 100%; }
 .provider-fields .provider-toggle { display: flex; align-items: flex-start; gap: 7px; line-height: 1.5; }
