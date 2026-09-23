@@ -8,6 +8,76 @@ import type {
 } from "./types";
 
 const STORAGE_KEY = "jev-sales-copilot:workspace:v1";
+const PROVIDER_PREFERENCES_KEY = "jev-sales-copilot:provider-preferences:v1";
+
+export type AgentModePreference = "demo" | "openai" | "openrouter-free" | "ollama" | "custom";
+
+export interface AgentServicePreference {
+  endpoint: string;
+  model: string;
+}
+
+export interface ProviderPreferences {
+  agentMode: AgentModePreference;
+  agentProfiles: Record<AgentModePreference, AgentServicePreference>;
+}
+
+const DEFAULT_PROVIDER_PREFERENCES: ProviderPreferences = {
+  agentMode: "demo",
+  agentProfiles: {
+    demo: { endpoint: "", model: "" },
+    openai: { endpoint: "https://api.openai.com/v1", model: "gpt-4.1-mini" },
+    "openrouter-free": { endpoint: "https://openrouter.ai/api/v1", model: "openrouter/free" },
+    ollama: { endpoint: "http://localhost:11434/v1", model: "" },
+    custom: { endpoint: "", model: "" },
+  },
+};
+
+const VALID_AGENT_MODES: AgentModePreference[] = ["demo", "openai", "openrouter-free", "ollama", "custom"];
+
+export function loadProviderPreferences(): ProviderPreferences {
+  try {
+    const raw = window.localStorage.getItem(PROVIDER_PREFERENCES_KEY);
+    if (!raw) return DEFAULT_PROVIDER_PREFERENCES;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return DEFAULT_PROVIDER_PREFERENCES;
+    const saved = parsed as Partial<ProviderPreferences>;
+    const profiles = { ...DEFAULT_PROVIDER_PREFERENCES.agentProfiles };
+    if (saved.agentProfiles && typeof saved.agentProfiles === "object") {
+      for (const mode of VALID_AGENT_MODES) {
+        const profile = saved.agentProfiles[mode];
+        if (!profile || typeof profile !== "object") continue;
+        profiles[mode] = {
+          endpoint: typeof profile.endpoint === "string" && profile.endpoint.length <= 2048 ? profile.endpoint : profiles[mode].endpoint,
+          model: typeof profile.model === "string" && profile.model.length <= 256 ? profile.model : profiles[mode].model,
+        };
+      }
+    }
+    const agentMode = VALID_AGENT_MODES.includes(saved.agentMode as AgentModePreference) ? saved.agentMode as AgentModePreference : DEFAULT_PROVIDER_PREFERENCES.agentMode;
+    // Read the previous single-profile format once so existing settings survive this update.
+    const legacy = saved as Partial<ProviderPreferences> & { agentEndpoint?: unknown; agentModel?: unknown };
+    if (!saved.agentProfiles && (typeof legacy.agentEndpoint === "string" || typeof legacy.agentModel === "string")) {
+      profiles[agentMode] = {
+        endpoint: typeof legacy.agentEndpoint === "string" ? legacy.agentEndpoint.slice(0, 2048) : profiles[agentMode].endpoint,
+        model: typeof legacy.agentModel === "string" ? legacy.agentModel.slice(0, 256) : profiles[agentMode].model,
+      };
+    }
+    return {
+      agentMode,
+      agentProfiles: profiles,
+    };
+  } catch {
+    return DEFAULT_PROVIDER_PREFERENCES;
+  }
+}
+
+export function saveProviderPreferences(preferences: ProviderPreferences): void {
+  try {
+    window.localStorage.setItem(PROVIDER_PREFERENCES_KEY, JSON.stringify(preferences));
+  } catch {
+    // Provider selection remains usable for this run even if local storage is unavailable.
+  }
+}
 
 export interface PersistedWorkspace {
   customers: CustomerConversation[];

@@ -21,7 +21,7 @@ import {
 } from "./strategy";
 import { demoStrategyProvider } from "./providers";
 import { buildProductOutputs, defaultProductWorkspace } from "./product";
-import { loadWorkspace, prepareImageForLocalStorage, saveWorkspace } from "./persistence";
+import { loadProviderPreferences, loadWorkspace, prepareImageForLocalStorage, saveProviderPreferences, saveWorkspace } from "./persistence";
 
 type AppMode = "sales" | "materials" | "review";
 type AgentMode = "demo" | "openai" | "openrouter-free" | "ollama" | "custom";
@@ -334,6 +334,7 @@ function ReviewView({ records, selectedId, copied, onSelect, onMarkReviewed, onC
 }
 
 function App() {
+  const [initialProviderPreferences] = useState(loadProviderPreferences);
   const [initialWorkspace] = useState(() => {
     const saved = loadWorkspace();
     const customers = restoreCustomers(saved);
@@ -369,11 +370,12 @@ function App() {
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [providerDialogOpen, setProviderDialogOpen] = useState(false);
   const [analysisBusy, setAnalysisBusy] = useState(false);
-  const [agentMode, setAgentMode] = useState<AgentMode>("demo");
+  const [agentMode, setAgentMode] = useState<AgentMode>(initialProviderPreferences.agentMode);
   const [shareWithProviders, setShareWithProviders] = useState(false);
-  const [agentEndpoint, setAgentEndpoint] = useState("https://api.openai.com/v1");
+  const [agentProfiles, setAgentProfiles] = useState(initialProviderPreferences.agentProfiles);
+  const agentEndpoint = agentProfiles[agentMode].endpoint;
+  const agentModel = agentProfiles[agentMode].model;
   const [agentApiKey, setAgentApiKey] = useState("");
-  const [agentModel, setAgentModel] = useState("");
   const [providerCheck, setProviderCheck] = useState("");
   const [agentAvailableModels, setAgentAvailableModels] = useState<string[]>([]);
   const [bochaJevApiKey, setBochaJevApiKey] = useState("");
@@ -381,6 +383,13 @@ function App() {
   const [bochaJevCheck, setBochaJevCheck] = useState("");
 
   const cloudProviderSelected = ["openai", "openrouter-free", "custom"].includes(agentMode);
+  const agentServiceDescription: Record<AgentMode, { name: string; endpoint: string; note: string }> = {
+    demo: { name: "本机 Demo", endpoint: "不连接外部服务", note: "用于演示策略流程，不调用云端模型。" },
+    ollama: { name: "本机 Ollama", endpoint: agentEndpoint, note: "策略请求发往本机 Ollama 服务。" },
+    "openrouter-free": { name: "OpenRouter 免费路由", endpoint: agentEndpoint, note: "需要 OpenRouter API Key；由免费路由选择可用模型。" },
+    openai: { name: "OpenAI API", endpoint: agentEndpoint, note: "使用 OpenAI 模型目录中的模型 ID。" },
+    custom: { name: "自定义 OpenAI-compatible", endpoint: agentEndpoint, note: "填写兼容 Chat Completions 的服务地址和模型 ID。" },
+  };
 
   const conversationCount = useMemo(() => messages.filter((item) => item.sender === "customer" || item.sender === "transcript").length, [messages]);
 
@@ -391,6 +400,11 @@ function App() {
     }, 250);
     return () => window.clearTimeout(timer);
   }, [customers, selectedCustomerId, productWorkspace, reviewRecords, selectedReviewId]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => saveProviderPreferences({ agentMode, agentProfiles }), 250);
+    return () => window.clearTimeout(timer);
+  }, [agentMode, agentProfiles]);
 
   async function copyText(text: string, id: string) {
     try {
@@ -695,9 +709,17 @@ function App() {
 
   function selectAgentMode(value: AgentMode) {
     setAgentMode(value);
-    if (value === "openai") { setAgentEndpoint("https://api.openai.com/v1"); setAgentModel("gpt-4.1-mini"); }
-    if (value === "openrouter-free") { setAgentEndpoint("https://openrouter.ai/api/v1"); setAgentModel("openrouter/free"); }
-    if (value === "ollama") { setAgentEndpoint("http://localhost:11434/v1"); setAgentModel(""); setAgentApiKey(""); }
+    setAgentApiKey("");
+    setAgentAvailableModels([]);
+    setProviderCheck("");
+  }
+
+  function updateAgentProfile(update: Partial<(typeof agentProfiles)[AgentMode]>) {
+    setAgentProfiles((current) => ({ ...current, [agentMode]: { ...current[agentMode], ...update } }));
+    if ("endpoint" in update) {
+      setAgentAvailableModels([]);
+      setProviderCheck("");
+    }
   }
 
   function resetDemo() {
@@ -802,15 +824,58 @@ function App() {
         </div>
       </main>
       {customerDialogOpen && <CustomerDialog onClose={() => setCustomerDialogOpen(false)} onSave={addCustomer} />}
-      {providerDialogOpen && <div className="modal-backdrop provider-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProviderDialogOpen(false); }}><section className="provider-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title"><header className="provider-dialog-header"><div><span className="overline">PROVIDER SETTINGS</span><h2 id="provider-dialog-title">模型与服务配置</h2></div><button className="dialog-close" type="button" aria-label="关闭模型与服务配置" onClick={() => setProviderDialogOpen(false)}>×</button></header><div className="provider-dialog-content"><div className="provider-sections">
-        <section><div className="provider-section-heading"><div><strong>① Bocha Jev · 客户决策模型</strong><small>bocha-jev-v1 · Choice / Score / Noul 结构化判断</small></div><span className="panel-note">点击生成时调用</span></div><div className="provider-fields"><label><span>Bocha Jev API Key（只驻留本次运行内存）</span><input type="password" autoComplete="off" value={bochaJevApiKey} onChange={(event) => setBochaJevApiKey(event.currentTarget.value)} placeholder="粘贴 Bocha Jev Client API Key" /><small>可留空；若应用启动环境已设置 BOCHA_JEV_API_KEY 或 BOCHA_SEARCH_API_KEY，则使用环境密钥。</small></label><div className="provider-action"><button className="text-button" type="button" onClick={() => void checkBochaJev()}>测试 Bocha Jev 连接</button><span>只请求 /v1/models；不发送聊天或触发决策。</span></div>{bochaJevCheck && <div className="provider-result" role="status">{bochaJevCheck}</div>}<label className="provider-toggle consent-toggle"><input type="checkbox" checked={bochaJevConsent} onChange={(event) => setBochaJevConsent(event.currentTarget.checked)} /><span>我授权本次 App 运行期间，在每次点击“生成策略”时，将最近最多 6 条对话（上限 300 字符）发送给 Bocha Jev 作判断。截图不会上传；取消勾选后不再发送后续请求，已提交请求无法撤回。</span></label></div><p className="provider-disclosure">聊天片段会发送到 jev.bocha.cn；判断模型访问额度与费用以 Bocha 账号当前政策为准。API Key 不写入本机存储。真实调用仅由“生成策略”触发。</p></section>
-        <section><div className="provider-section-heading"><div><strong>② Agent · 策略与回复生成</strong><small>基于 Bocha Jev 的结构化判断起草策略和候选回复</small></div><label className="provider-mode"><span>服务</span><select value={agentMode} onChange={(event) => selectAgentMode(event.currentTarget.value as AgentMode)}><option value="demo">本地 Demo · 免费</option><option value="ollama">本地 Ollama · 免费运行</option><option value="openrouter-free">OpenRouter 免费模型</option><option value="openai">OpenAI API · 按量计费</option><option value="custom">自定义 OpenAI-compatible</option></select></label></div>
-          {agentMode !== "demo" && <div className="provider-fields">{agentMode !== "ollama" && <label><span>服务商 API Key（仅本次运行内存）</span><input type="password" autoComplete="off" value={agentApiKey} onChange={(event) => setAgentApiKey(event.currentTarget.value)} placeholder={agentMode === "openrouter-free" ? "OpenRouter Key（需注册；免费模型有限额）" : "粘贴 API Key"} />{agentMode === "openrouter-free" && <small>免费路由按请求选择当前可用模型；额度和供应商可能变化。</small>}</label>}<label><span>模型 ID</span><input list="agent-model-catalog" value={agentModel} onChange={(event) => setAgentModel(event.currentTarget.value)} placeholder={agentMode === "ollama" ? "先在本机安装并拉取模型，如 qwen3:8b" : "填写或从测试连接获取的模型目录中选择"} /><datalist id="agent-model-catalog">{agentAvailableModels.map((model) => <option key={model} value={model} />)}</datalist></label>{agentMode === "custom" && <label><span>OpenAI-compatible Base URL</span><input value={agentEndpoint} onChange={(event) => setAgentEndpoint(event.currentTarget.value)} placeholder="https://provider.example/v1" /></label>}{agentMode === "ollama" && <label><span>本机 OpenAI-compatible Base URL</span><input value={agentEndpoint} onChange={(event) => setAgentEndpoint(event.currentTarget.value)} placeholder="http://localhost:11434/v1" /></label>}<div className="provider-action"><button className="text-button" onClick={checkAgent}>测试 Agent 连接</button><span>只读取 /models，不会发送聊天内容或产生生成调用。</span></div></div>}
+      {providerDialogOpen && <div className="modal-backdrop provider-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setProviderDialogOpen(false); }}>
+        <section className="provider-dialog" role="dialog" aria-modal="true" aria-labelledby="provider-dialog-title">
+          <header className="provider-dialog-header">
+            <div><span className="overline">MODEL & SERVICE</span><h2 id="provider-dialog-title">模型与服务配置</h2></div>
+            <button className="dialog-close" type="button" aria-label="关闭模型与服务配置" onClick={() => setProviderDialogOpen(false)}>×</button>
+          </header>
+          <div className="provider-dialog-content">
+            <div className="provider-sections">
+              <section className="provider-card bocha-provider-card">
+                <div className="provider-section-heading">
+                  <div><strong>客户判断模型</strong><small>Bocha Jev · 固定决策服务</small></div>
+                  <span className="provider-role-badge">结构化判断</span>
+                </div>
+                <div className="provider-specs">
+                  <div><span>模型</span><strong>bocha-jev-v1</strong></div>
+                  <div><span>接口</span><strong>https://jev.bocha.cn/v1/systemone</strong></div>
+                  <div><span>输出</span><strong>Choice · Score · Noul</strong></div>
+                </div>
+                <div className="provider-fields">
+                  <label>
+                    <span>Bocha Jev Client API Key</span>
+                    <input type="password" autoComplete="off" value={bochaJevApiKey} onChange={(event) => setBochaJevApiKey(event.currentTarget.value)} placeholder="粘贴 API Key；仅保留在本次运行内存" />
+                    <small>也可在启动应用时通过 BOCHA_JEV_API_KEY 环境变量提供。</small>
+                  </label>
+                  <div className="provider-action"><button className="text-button" type="button" onClick={() => void checkBochaJev()}>测试 Bocha Jev 连接</button><span>读取模型目录，不提交客户对话。</span></div>
+                  {bochaJevCheck && <div className="provider-result" role="status">{bochaJevCheck}</div>}
+                  <label className="provider-toggle consent-toggle"><input type="checkbox" checked={bochaJevConsent} onChange={(event) => setBochaJevConsent(event.currentTarget.checked)} /><span>允许在点击“生成策略”时，将最近最多 6 条、总长不超过 300 字符的对话发送给 Bocha Jev。此授权仅对本次应用运行有效。</span></label>
+                </div>
+              </section>
+
+              <section className="provider-card agent-provider-card">
+                <div className="provider-section-heading">
+                  <div><strong>Agent 策略模型</strong><small>根据 Bocha Jev 判断生成下一步策略与候选回复</small></div>
+                  <label className="provider-mode"><span>服务商</span><select value={agentMode} onChange={(event) => selectAgentMode(event.currentTarget.value as AgentMode)}><option value="demo">本机 Demo · 无需 API</option><option value="ollama">本机 Ollama</option><option value="openrouter-free">OpenRouter 免费路由</option><option value="openai">OpenAI API</option><option value="custom">自定义 OpenAI-compatible</option></select></label>
+                </div>
+                <div className="provider-active-service"><div><span>{agentServiceDescription[agentMode].name}</span><strong>{agentServiceDescription[agentMode].endpoint}</strong></div><small>{agentServiceDescription[agentMode].note}</small></div>
+                {agentMode === "demo" ? <p className="provider-local-note">本机 Demo 可直接运行；如需使用其他 Agent 服务，请在上方选择服务商。</p> : <div className="provider-fields">
+                  {agentMode !== "ollama" && <label><span>服务商 API Key</span><input type="password" autoComplete="off" value={agentApiKey} onChange={(event) => setAgentApiKey(event.currentTarget.value)} placeholder={agentMode === "openrouter-free" ? "填写 OpenRouter API Key" : "填写服务商 API Key"} /><small>密钥只保留在本次应用运行内存。</small></label>}
+                  <label><span>模型 ID</span><input list="agent-model-catalog" value={agentModel} onChange={(event) => updateAgentProfile({ model: event.currentTarget.value })} placeholder={agentMode === "ollama" ? "如 qwen3:8b" : "填写模型 ID，或先测试连接再从目录选择"} /><datalist id="agent-model-catalog">{agentAvailableModels.map((model) => <option key={model} value={model} />)}</datalist><small>服务与模型选择会保存在本机；API Key 不保存。</small></label>
+                  {agentMode === "custom" && <label><span>OpenAI-compatible Base URL</span><input value={agentEndpoint} onChange={(event) => updateAgentProfile({ endpoint: event.currentTarget.value })} placeholder="https://provider.example/v1" /></label>}
+                  {agentMode === "ollama" && <label><span>本机 Ollama Base URL</span><input value={agentEndpoint} onChange={(event) => updateAgentProfile({ endpoint: event.currentTarget.value })} placeholder="http://localhost:11434/v1" /></label>}
+                  {(agentMode === "openai" || agentMode === "openrouter-free") && <div className="provider-fixed-endpoint"><span>服务地址</span><strong>{agentEndpoint}</strong></div>}
+                  <div className="provider-action"><button className="text-button" type="button" onClick={() => void checkAgent()}>测试 Agent 连接</button><span>读取模型目录，不生成内容；连接后可选择可用模型 ID。</span></div>
+                </div>}
+                {providerCheck && <div className="provider-result" role="status">{providerCheck}</div>}
+                {cloudProviderSelected && <label className="provider-toggle consent-toggle"><input type="checkbox" checked={shareWithProviders} onChange={(event) => setShareWithProviders(event.currentTarget.checked)} /><span>同意在点击“生成策略”时，将本轮对话及结构化判断发送给所选云端 Agent。</span></label>}
+              </section>
+              <p className="provider-disclosure">客户对话只会在你分别授权并点击“生成策略”后发送至对应服务。Bocha Jev 和云端 Agent 的授权互相独立；截图不上传。客户资料、产品素材和复盘记录保存在本机。应用不会自动发送微信消息。</p>
+            </div>
+          </div>
         </section>
-        {providerCheck && <div className="provider-result" role="status">{providerCheck}</div>}
-        {cloudProviderSelected && <label className="provider-toggle consent-toggle"><input type="checkbox" checked={shareWithProviders} onChange={(event) => setShareWithProviders(event.currentTarget.checked)} /><span>我同意在分析时将本轮微信/手动聊天文本发送到我启用的云端服务商；截图不上传。可随时关闭云端服务或撤销同意。</span></label>}
-        <p className="provider-disclosure">产品素材、客户资料和复盘不会自动外发。Bocha Jev 仅在你启用上方授权并点击“生成策略”后接收最近对话片段；Agent 云端只有在单独同意后才接收当前输入与结构化判断。所有 API Key 仅驻留运行内存；对话和复盘数据保存在本机。Agent 云端地址仅允许 HTTPS；应用不自动发送微信消息。</p>
-      </div></div></section></div>}
+      </div>}
     </div>
   );
 }
