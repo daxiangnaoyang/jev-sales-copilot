@@ -20,6 +20,8 @@ export interface AgentServicePreference {
 export interface ProviderPreferences {
   agentMode: AgentModePreference;
   agentProfiles: Record<AgentModePreference, AgentServicePreference>;
+  videoProvider: "none" | "volcengine-seedance";
+  videoModel: string;
 }
 
 const DEFAULT_PROVIDER_PREFERENCES: ProviderPreferences = {
@@ -31,6 +33,8 @@ const DEFAULT_PROVIDER_PREFERENCES: ProviderPreferences = {
     ollama: { endpoint: "http://localhost:11434/v1", model: "" },
     custom: { endpoint: "", model: "" },
   },
+  videoProvider: "none",
+  videoModel: "doubao-seedance-2-5-260628",
 };
 
 const VALID_AGENT_MODES: AgentModePreference[] = ["demo", "openai", "openrouter-free", "ollama", "custom"];
@@ -65,6 +69,10 @@ export function loadProviderPreferences(): ProviderPreferences {
     return {
       agentMode,
       agentProfiles: profiles,
+      videoProvider: saved.videoProvider === "volcengine-seedance" ? "volcengine-seedance" : "none",
+      videoModel: typeof saved.videoModel === "string" && saved.videoModel.trim().length <= 256
+        ? saved.videoModel.trim()
+        : DEFAULT_PROVIDER_PREFERENCES.videoModel,
     };
   } catch {
     return DEFAULT_PROVIDER_PREFERENCES;
@@ -137,7 +145,7 @@ export async function prepareImageForLocalStorage(file: File): Promise<string> {
     element.src = source;
   });
 
-  const maxEdge = 1600;
+  const maxEdge = 1280;
   const scale = Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight));
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
@@ -147,5 +155,5 @@ export async function prepareImageForLocalStorage(file: File): Promise<string> {
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL("image/jpeg", 0.82);
+  return canvas.toDataURL("image/jpeg", 0.72);
 }

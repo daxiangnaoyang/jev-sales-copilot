@@ -123,6 +123,14 @@ export interface ProductImage {
   note: string;
 }
 
+export interface ProductIntakeMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  attachmentIds?: string[];
+  createdAt: string;
+}
+
 export interface ProductStoryboardScene {
   id: string;
   time: string;
@@ -152,7 +160,18 @@ export interface ProductOutput {
   text?: string;
   cards?: ProductDiagramCard[];
   scenes?: ProductStoryboardScene[];
+  videoGeneration?: ProductVideoGeneration;
+  stale?: boolean;
   factIds: string[];
+}
+
+export interface ProductVideoGeneration {
+  provider: "volcengine-seedance";
+  taskId: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "expired" | "cancelled" | "unknown";
+  videoUrl?: string;
+  error?: string;
+  updatedAt: string;
 }
 
 export interface ProductWorkspace {
@@ -163,9 +182,10 @@ export interface ProductWorkspace {
   platform: "朋友圈" | "小红书" | "视频号";
   tone: "专业种草" | "亲切日常" | "活泼有趣";
   ratio: "3:4" | "4:5" | "9:16";
-  videoDirection: "竖版 9:16 · 15 秒" | "横版 16:9 · 5—10 秒";
+  videoDirection: "竖版 9:16 · 15 秒" | "横版 16:9 · 15 秒";
   facts: ProductFact[];
   images: ProductImage[];
+  intakeMessages: ProductIntakeMessage[];
   outputs: ProductOutput[];
   selectedOutputId?: string;
   status: "COLLECTING" | "READY_FOR_REVIEW";

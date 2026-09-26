@@ -7,11 +7,18 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     let builder = builder.invoke_handler(tauri::generate_handler![
         macos_wechat::request_screen_capture_access,
+        macos_wechat::has_screen_capture_access,
+        macos_wechat::request_accessibility_access,
+        macos_wechat::is_wechat_frontmost,
         macos_wechat::scan_wechat,
         macos_wechat::import_recent_wechat_customers,
         macos_wechat::fill_wechat_input,
         macos_wechat::agent_strategy,
+        macos_wechat::agent_product_intake,
         macos_wechat::check_agent_provider,
+        macos_wechat::check_seedance_video_provider,
+        macos_wechat::create_seedance_video_task,
+        macos_wechat::get_seedance_video_task,
         macos_wechat::check_bocha_jev_provider,
         macos_wechat::bocha_jev_decide
     ]);
